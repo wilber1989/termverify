@@ -162,40 +162,6 @@ int main(int argc, const char *argv[])
         printf("\033[1m\033[45;33m[5] SHA1 digest of bios&os image :\n%s\033[0m\n\n",mdString3);
         usleep(2000000U);
 
-
-        /*RSA encrypto*/
-        printf("\033[1m\033[45;33m[6] Generating RSA key......\033[0m\n");
-        usleep(2000000U);
-        RSA *rsa = RSA_new();
-        BIGNUM *bne=BN_new();
-        BN_set_word(bne,RSA_F4);
-        RSA_generate_key_ex(rsa,512,bne,NULL);
-        RSA* pub = RSAPublicKey_dup(rsa);
-        //RSA* pri = RSAPrivateKey_dup(rsa);
-        RSA_print_fp(stdout, pub, 5);
-        printf("\n");
-        usleep(2000000U);
-        //RSA_print(stdout, pri, 5);
-        unsigned char cipper[512]={0};
-        unsigned char newplain[512]={0};
-        size_t outl=512;
-        size_t outl2;
-        // printf("----------------------------------\n");  
-        outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest,cipper,rsa,RSA_PKCS1_OAEP_PADDING);
-        printf("%s\n",cipper);
-        printf("\033[1m\033[45;33m[7] Encrypt publish message with RSA_public_key:\033[0m\n");
-        char shString[512*2+1];
-        for (unsigned int i = 0; i < outl; i++)
-        sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
-        printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
-        usleep(2000000U);
-        //outl2=RSA_private_decrypt(outl,cipper,newplain,rsa,RSA_PKCS1_OAEP_PADDING);
-        //printf("-----------------\n");
-        //for(unsigned int i =0;i<outl2;i++) {
-        //    printf("%02x",newplain[i]);
-        //}
-        //printf("\n");
-
         /*create publish json data*/
         cJSON *root,*ml,*pcrs,*file1,*file2;   
         root=cJSON_CreateObject();     
@@ -216,10 +182,47 @@ int main(int argc, const char *argv[])
 
         cJSON_AddItemToObject(root, "PCRs", pcrs=cJSON_CreateObject());
         cJSON_AddStringToObject(pcrs,"1",mdString3);
-        char* out1 = cJSON_Print(root);//生成json用于加密
+        char* out1 = cJSON_Print(root);//生成json经私钥加密后发布
         //printf("%s\n  %ld",out1,strlen(out1));
+        unsigned char digest4[SHA_DIGEST_LENGTH];
+        SHA_CTX ctx4;
+        SHA1_Init(&ctx4);
+        SHA1_Update(&ctx4, out1, strlen(out1));
+        SHA1_Final(digest4, &ctx4);
 
-        cJSON_AddStringToObject(root,"sign",mdString); 
+        /*RSA encrypto*/
+        printf("\033[1m\033[45;33m[6] Generating RSA key......\033[0m\n\n");
+        //usleep(2000000U);
+        RSA *rsa = RSA_new();
+        BIGNUM *bne=BN_new();
+        BN_set_word(bne,RSA_F4);
+        RSA_generate_key_ex(rsa,512,bne,NULL);
+        //RSA* pub = RSAPublicKey_dup(rsa);
+        //RSA* pri = RSAPrivateKey_dup(rsa);
+        //RSA_print_fp(stdout, pri, 5);
+        //printf("\n");
+        usleep(2000000U);
+        //RSA_print(stdout, pri, 5);
+        unsigned char cipper[1024]={0};
+        unsigned char newplain[512]={0};
+        size_t outl=512;
+        size_t outl2;
+        // printf("----------------------------------\n");  
+        outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest4,cipper,rsa, RSA_PKCS1_PADDING);
+        printf("\033[1m\033[45;33m[7] Encrypt publish message with RSA_private_key:\033[0m\n");
+        char shString[512*2+1];
+        for (unsigned int i = 0; i < outl; i++)
+        sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
+        printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
+        usleep(2000000U);
+        //outl2=RSA_private_decrypt(outl,cipper,newplain,rsa,RSA_PKCS1_OAEP_PADDING);
+        //printf("-----------------\n");
+        //for(unsigned int i =0;i<outl2;i++) {
+        //    printf("%02x",newplain[i]);
+        //}
+        //printf("\n");
+
+        cJSON_AddStringToObject(root,"sign",shString); 
 
         char* out = cJSON_Print(root);
         //printf("%s\n",out); 
