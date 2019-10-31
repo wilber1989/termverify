@@ -3,13 +3,16 @@ CC = gcc
 CFLAGS = -Wextra -Wall -std=gnu99 -Iinclude -Wno-unused-parameter -Wno-unused-variable -Wno-duplicate-decl-specifier
 
 MQTT_C_SOURCES = src/mqtt.c src/mqtt_pal.c
-MQTT_C_EXAMPLES = bin/simple_publisher bin/simple_subscriber bin/reconnect_subscriber bin/bio_publisher bin/openssl_publisher bin/rsatest
+MQTT_C_EXAMPLES = bin/simple_publisher bin/simple_subscriber bin/reconnect_subscriber bin/bio_publisher bin/openssl_publisher bin/rsatest bin/main
 MQTT_C_UNITTESTS = bin/tests
 BINDIR = bin
 
 all: $(BINDIR) $(MQTT_C_UNITTESTS) $(MQTT_C_EXAMPLES)
 
 bin/simple_%: examples/simple_%.c $(MQTT_C_SOURCES)
+	$(CC) $(CFLAGS) $^ -lpthread -lssl -lcrypto -L/usr/local/lib -lcjson -o $@
+
+bin/main: examples/main.c $(MQTT_C_SOURCES)
 	$(CC) $(CFLAGS) $^ -lpthread -lssl -lcrypto -L/usr/local/lib -lcjson -o $@
 
 bin/rsatest: examples/rsatest.c
