@@ -171,15 +171,15 @@ int main(int argc, const char *argv[])
  //       cJSON_AddItemToObject(root, "name", cJSON_CreateString("Jack (\"Bee\") Nimble"));   
         cJSON_AddItemToObject(root, "ML", ml=cJSON_CreateObject());  
  //       cJSON_AddStringToObject(fmt,"type",     "rect");   
-        cJSON_AddNumberToObject(ml,"length", 2);
+        cJSON_AddNumberToObject(ml,"length",2);
         cJSON_AddItemToObject(root, "1", file1=cJSON_CreateObject()); 
         cJSON_AddItemToObject(root, "2", file2=cJSON_CreateObject());
 
         cJSON_AddStringToObject(file1,"name","BIOS");
         cJSON_AddStringToObject(file1,"sha1",mdString);
-        cJSON_AddNumberToObject(file1,"PCR", 1);
+        cJSON_AddNumberToObject(file1,"PCR",1);
 
-        cJSON_AddStringToObject(file2,"name","BIOS");
+        cJSON_AddStringToObject(file2,"name","OS");
         cJSON_AddStringToObject(file2,"sha1",mdString2);
         cJSON_AddNumberToObject(file2,"PCR", 1);
 
@@ -235,6 +235,7 @@ int main(int argc, const char *argv[])
         mqtt_publish(&client, topic, out, strlen((const char *)out) + 1, MQTT_PUBLISH_QOS_0);
         cJSON_Delete(root);
         free(out);
+        usleep(2000000U);
         /* check for errors */
         if (client.error != MQTT_OK) {
             fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
@@ -242,12 +243,14 @@ int main(int argc, const char *argv[])
         }
     }   
 
- /* subscribe */
+    /* subscribe */
     mqtt_subscribe(&client, topic, 0);
 
     /* start publishing the time */
-    printf("%s listening for '%s' messages.\n", argv[0], topic);
-    printf("Press CTRL-D to exit.\n\n");
+    //printf("-------------------------------\n");
+    //printf("%s listening for '%s' messages.\n", argv[0], topic);
+    // printf("-------------------------------\n");
+    //printf("Press CTRL-D to exit.\n\n");
     
     /* block */
     while(fgetc(stdin) != EOF); 
@@ -271,7 +274,18 @@ void exit_example(int status, int sockfd, pthread_t *client_daemon)
 
 void publish_callback(void** unused, struct mqtt_response_publish *published) 
 {
-    /* not used in this example */
+    /* note that published->topic_name is NOT null-terminated (here we'll change it to a c-string) */
+    char* topic_name = (char*) malloc(published->topic_name_size + 1);
+    memcpy(topic_name, published->topic_name, published->topic_name_size);
+    topic_name[published->topic_name_size] = '\0';
+    usleep(2000000U);
+    printf("-------------------------------\n");
+    printf("Listening for messages.\n");
+    printf("-------------------------------\n");
+    usleep(2000000U);
+    printf("\033[1m\033[45;32mReceived publish('%s'): %s\033[0m\n", topic_name, (const char*) published->application_message);
+
+    free(topic_name);
 }
 
 void* client_refresher(void* client)
