@@ -49,7 +49,7 @@ int main(int argc, const char *argv[])
     if (argc > 1) {
         addr = argv[1];
     } else {
-        addr = "192.168.31.185";
+        addr = "127.0.0.1";
     }
 
     /* get port number (argv[2] if present) */
@@ -96,14 +96,17 @@ int main(int argc, const char *argv[])
     }
 
     /* start publishing the time */
-    printf("%s is ready to run.\n", argv[0]);
-    printf("Press ENTER to publish the current time.\n");
+    printf("----------------------------------------\n");
+    printf("%s is ready to run....\n", argv[0]);
+    printf("----------------------------------------\n");
+    printf("Press ENTER to publish the message.\n");
+    printf("----------------------------------------\n");
     printf("Press CTRL-D (or any other key) to exit.\n\n");
 
     FILE *fp1,*fp2;
     char buff1[1024];
     char buff2[1024];
-    while(fgetc(stdin) == '\n') {
+    if(fgetc(stdin) == '\n') {
         /* INPUT bios_image*/
         fp1=fopen("/home/zwl/桌面/bios_image.txt","rb");
         if(fp1==NULL)
@@ -238,6 +241,16 @@ int main(int argc, const char *argv[])
             exit_example(EXIT_FAILURE, sockfd, &client_daemon);
         }
     }   
+
+ /* subscribe */
+    mqtt_subscribe(&client, topic, 0);
+
+    /* start publishing the time */
+    printf("%s listening for '%s' messages.\n", argv[0], topic);
+    printf("Press CTRL-D to exit.\n\n");
+    
+    /* block */
+    while(fgetc(stdin) != EOF); 
 
     /* disconnect */
     printf("\n%s disconnecting from %s\n", argv[0], addr);

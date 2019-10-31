@@ -55,7 +55,7 @@ int main(int argc, const char *argv[])
     if (argc > 3) {
         topic = argv[3];
     } else {
-        topic = "datetime";
+        topic = "devices/TC/measurement";
     }
 
     /* open the non-blocking TCP socket (connecting to the broker) */
