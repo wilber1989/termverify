@@ -14,93 +14,65 @@
 
 # 
 
-MQTT-C is an [MQTT v3.1.1](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html) 
-client written in C. MQTT is a lightweight publisher-subscriber-based messaging protocol that is
-commonly used in IoT and networking applications where high-latency and low data-rate links 
-are expected. The purpose of MQTT-C is to provide a **portable** MQTT client, **written in C**, 
-for embedded systems and PC's alike. MQTT-C does this by providing a transparent Platform 
-Abstraction Layer (PAL) which makes porting to new platforms easy. MQTT-C is completely 
-thread-safe but can also run perfectly fine on single-threaded systems making MQTT-C 
-well-suited for embedded systems and microcontrollers. Finally, MQTT-C is small; there are only 
-two source files totalling less than 2000 lines.
+为对各类终端设备进行身份认证、远程度量、版本升级，确保终端可信接入，同时满足前期《远程验证细化方案》当中对于终端侧与服务侧交互内容的定义，本方案对接入安全管理平台的终端设备功能配置进行设计，从启动度量、身份认证过程阐述具体流程。
+    （1）身份认证
+a、终端调用RSA函数生成设备公私钥对（dpubkey、dprikey），密钥对以只读方式储存在本地flash当中，并予以权限控制；
+b、使用由安全管理平台提供的产品私钥（pprikey）对设备ID及设备公钥e和n值进行签名，以json格式组织数据，如下：
+payload = {
+    'flag':'register',
+    'deviceid':'chislab1'
+    'pub_e':'xx',
+    'pub_n':'xx',
+    'sign':'xxx'
+}
+c、利用MQTT协议将主题为“devices/TC/measurement”、flag为register的数据publish至broker服务器，等待安全管理平台订阅消费；
+发送函数形式如下：
+mqtt_publish(&client, topic, json, strlen((const char *)json)+1, MQTT_PUBLISH_QOS_0);
+d、等待接受服务器端验证返回结果，订阅broker侧相同主题的保留消息（即最后一条发布消息），获取到后判断flag=register_res，利用安全管理平台公钥对数据进行验签，并判断返回json当中key=status的键值是否为success。
+订阅函数形式如下：
+mqtt_subscribe(&client, topic, MQTT_PUBLISH_QOS_1 | MQTT_PUBLISH_RETAIN);
+（2）远程度量
+a、若验签及设备注册success，设备读取BIOS及OS镜像img文件，并求出SHA度量值，按顺序对镜像hash值进行PCR寄存器扩展储存；
+b、利用设备私钥（dprikey）对镜像文件PCR度量值进行签名，json组包格式如下所示：
+payload = {
+ 'flag':'measure'
+'deviceid':'chislab1'
+ "ML": { 
+"length": 2,
+ "1": {
+ "name": "BIOS", 
+"sha1": "xxxxxxxx",
+ "pcr": 1, 
+}, 
+"2": { 
+"name": "OS",
+"sha1": "xxxxxxxx", 
+"pcr": 1, 
+} 
+}, 
+"PCRS": { 
+"1": "xxxxxxxxx"
+ }, 
+"sign": "xxxxxxxxx" 
+}
+以上流程图示如下：
 
-#### A note from the author
-It's been great to hear about all the places MQTT-C is being used! Please don't hesitate
-to get in touch with me or submit issues on GitHub!
-
-## Getting Started
-To use MQTT-C you first instantiate a `struct mqtt_client` and initialize it by calling
-@ref mqtt_init.
-```c
-    struct mqtt_client client; /* instantiate the client */
-    mqtt_init(&client, ...);   /* initialize the client */
-```
-Once your client is initialized you need to connect to an MQTT broker.
-```c
-    mqtt_connect(&client, ...); /* send a connection request to the broker. */
-```
-At this point the client is ready to use! For example, we can subscribe to a topic like so:
-```c
-    /* subscribe to "toaster/temperature" with a max QoS level of 0 */
-    mqtt_subscribe(&client, "toaster/temperature", 0);
-```
-And we can publish to a topic like so:
-```c
-    /* publish coffee temperature with a QoS level of 1 */
-    int temperature = 67;
-    mqtt_publish(&client, "coffee/temperature", &temperature, sizeof(int), MQTT_PUBLISH_QOS_1);
-```
-Those are the basics! From here the [examples](https://github.com/LiamBindle/MQTT-C/tree/master/examples) and [API documentation](https://liambindle.ca/MQTT-C/group__api.html) are good places to get started.
-
-## Building
-There are **only two source files** that need to be built, `mqtt.c` and `mqtt_pal.c`.
-These files are ANSI C (C89) compatible, and should compile with any C compiler.
-
-Then, simply <code>\#include <mqtt.h></code>.
-
-## Documentation
-Pre-built documentation can be found here: [https://liambindle.ca/MQTT-C](https://liambindle.ca/MQTT-C). Be sure to check out the [examples](https://github.com/LiamBindle/MQTT-C/tree/master/examples) too.
-
-The @ref api documentation contains all the documentation application programmers should need. 
-The @ref pal documentation contains everything you should need to port MQTT-C to a new platform,
-and the other modules contain documentation for MQTT-C developers.
-
-## Testing and Building the Tests
-The MQTT-C unit tests use the [cmocka unit testing framework](https://cmocka.org/). 
-Therefore, [cmocka](https://cmocka.org/) *must* be installed on your machine to build and run 
-the unit tests. For convenience, a simple `"makefile"` is included to build the unit tests and 
-examples on UNIX-like machines. The unit tests and examples can be built as follows:
-```bash
-    $ make all
-``` 
-The unit tests and examples will be built in the `"bin/"` directory. The unit tests can be run 
-like so:
-```bash
-    $ ./bin/tests [address [port]]
-```
-Note that the \c address and \c port arguments are both optional to specify the location of the
-MQTT broker that is to be used for the tests. If no \c address is given then the 
-[Mosquitto MQTT Test Server](https://test.mosquitto.org/) will be used. If no \c port is given, 
-port 1883 will be used.
-
-## Portability
-MQTT-C provides a transparent platform abstraction layer (PAL) in `mqtt_pal.h` and `mqtt_pal.c`.
-These files declare and implement the types and calls that MQTT-C requires. Refer to 
-@ref pal for the complete documentation of the PAL.
-
-## Contributing
-Please feel free to submit issues and pull-requests [here](https://github.com/LiamBindle/MQTT-C).
-When submitting a pull-request please ensure you have *fully documented* your changes and 
-added the appropriate unit tests.
-
-
-## License
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the 
-`"LICENSE"` file for more details.
-
-## Authors
-MQTT-C was initially developed as a CMPT 434 (Winter Term, 2018) final project at the University of 
-Saskatchewan by:
-- **Liam Bindle**
-- **Demilade Adeoye**
+c、将主题为“devices/TC/measurement”、flag为measure的数据的json数据发送至broker服务器，等待安全管理平台进行度量验证。
+d、订阅相同主题消息，等待并获取到后判断flag=measure_res，利用安全管理平台公钥对数据进行验签，并判断返回json当中key=status的键值是否为success。
+（3）版本升级
+a、若验签及设备注册success，订阅主题为“devices/TC/update”的消息，在获取到消息后利用安全管理平台公钥对数据进行验签，数据格式如下：
+payload = {
+    'flag':'update',
+    'deviceid':'chislab1'
+    'version':'xx',
+    'download':'xx',
+    'sign':'xxx'
+}
+b、获取本地固件version，并与获取到的最新远程version进行判断，若版本一致，则不予更新，用设备私钥（dprikey）签名后发送反馈消息，格式如下：
+payload = {
+    'flag':'update_res',
+    'status':'xxx'
+'sign':'xxxx'
+}
+c、若版本不一致，按照download地址下载并安装固件，重启更新系统固件镜像和固件版本信息。固件更新成功后，发送主题为“devices/TC/update”的消息，消息格式与b相同，通知安全管理平台更新完毕。
 

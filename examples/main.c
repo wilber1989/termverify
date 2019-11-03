@@ -64,7 +64,39 @@ int getdpubkey()
     return 0;
 }
 
+void exit_example(int status, int sockfd, pthread_t *client_daemon)
+{
+    if (sockfd != -1) close(sockfd);
+    if (client_daemon != NULL) pthread_cancel(*client_daemon);
+    exit(status);
+}
 
+
+
+void publish_callback(void** unused, struct mqtt_response_publish *published) 
+{
+    /* note that published->topic_name is NOT null-terminated (here we'll change it to a c-string) */
+    char* topic_name = (char*) malloc(published->topic_name_size + 1);
+    memcpy(topic_name, published->topic_name, published->topic_name_size);
+    topic_name[published->topic_name_size] = '\0';
+    usleep(2000000U);
+    printf("-------------------------------\n");
+    printf("Listening for messages.\n");
+    printf("-------------------------------\n");
+    usleep(2000000U);
+    printf("\033[1m\033[45;32mReceived publish('%s'): %s\033[0m\n", topic_name, (const char*) published->application_message);
+    free(topic_name);
+}
+
+void* client_refresher(void* client)
+{
+    while(1) 
+    {
+        mqtt_sync((struct mqtt_client*) client);
+        usleep(100000U);
+    }
+    return NULL;
+}
 int main(int argc, const char *argv[]) 
 {
     printf("----------------------------------------\n");
@@ -145,9 +177,88 @@ int main(int argc, const char *argv[])
     //printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
 	cJSON_AddStringToObject(root,"sign",shString);
 	char* json1_1 = cJSON_Print(root);
-	printf("\033[1m\033[45;33m[2] 产品私钥对设备ID及设备公钥签名:\033[0m\n\n");
+	printf("\033[1m\033[45;33m[2] 产品私钥对设备ID及设备公钥签名sign:\033[0m\n\n");
 	usleep(2000000U);
-	printf("%s\n",json1_1 );
+	printf("%s\n\n",shString);
 	usleep(2000000U);
-	return 0;
+
+	/*建立socket并发布*/
+    const char* addr;
+    const char* port;
+    const char* topic;
+
+    /* get address (argv[1] if present) */
+    if (argc > 1) {
+        addr = argv[1];
+    } else {
+        //addr = "218.89.239.8";
+        addr = "127.0.0.1";
+    }
+
+    /* get port number (argv[2] if present) */
+    if (argc > 2) {
+        port = argv[2];
+    } else {
+        port = "1883";
+    }
+
+    /* get the topic name to publish */
+    if (argc > 3) {
+        topic = argv[3];
+    } else {
+        topic = "devices/TC/measurement";
+    }
+
+    /* open the non-blocking TCP socket (connecting to the broker) */
+    int sockfd = open_nb_socket(addr, port);
+
+    if (sockfd == -1) {
+        perror("Failed to open socket: ");
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+    }
+
+    /* setup a client */
+    struct mqtt_client client;
+    uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
+    uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
+    mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
+    mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
+
+    /* check that we don't have any errors */
+    if (client.error != MQTT_OK) {
+        fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+    }
+
+    /* start a thread to refresh the client (handle egress and ingree client traffic) */
+    pthread_t client_daemon;
+    if(pthread_create(&client_daemon, NULL, client_refresher, &client)) {
+        fprintf(stderr, "Failed to start client daemon.\n");
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+
+    }
+     /* publish the register */        
+    mqtt_publish(&client, topic, json1_1, strlen((const char *)json1_1) + 1, MQTT_PUBLISH_QOS_0);
+    printf("\033[1m\033[45;33m[3]终端发布消息:\033[0m\n\n");
+    usleep(2000000U);
+	printf("%s\n\n",json1_1);
+    cJSON_Delete(root);
+    free(json1_1);
+    //usleep(2000000U);
+
+	/* subscribe */
+    mqtt_subscribe(&client, topic, 0);
+    //usleep(2000000U);
+    mqtt_publish(&client, topic, "1111111111111111111", 25, MQTT_PUBLISH_QOS_0);
+    usleep(8000000U);
+    mqtt_subscribe(&client, topic, 0);
+   	/* check for errors */
+    if (client.error != MQTT_OK) {
+        fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
+        exit_example(EXIT_FAILURE, sockfd, &client_daemon);
+        }	
+ 	/* exit */ 
+    exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+    return 0;
 }
+
