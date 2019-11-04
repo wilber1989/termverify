@@ -9,6 +9,9 @@
 #include <base64.h>
 #include "templates/posix_sockets.h"
 
+/*获取订阅消息变量*/
+char rev_msg[512];
+
 /*创建pem文件*/
 int createkeyfile()
 {
@@ -80,11 +83,12 @@ void publish_callback(void** unused, struct mqtt_response_publish *published)
     memcpy(topic_name, published->topic_name, published->topic_name_size);
     topic_name[published->topic_name_size] = '\0';
     usleep(2000000U);
-    printf("-------------------------------\n");
-    printf("Listening for messages.\n");
-    printf("-------------------------------\n");
-    usleep(2000000U);
-    printf("\033[1m\033[45;32mReceived publish('%s'): %s\033[0m\n", topic_name, (const char*) published->application_message);
+    //printf("-------------------------------\n");
+    //printf("Listening for messages.\n");
+    //printf("-------------------------------\n");
+    //usleep(2000000U);
+    printf("\033[1m\033[45;32主题('%s')最新消息:\n %s\033[0m\n", topic_name, (const char*) published->application_message);
+    strcpy(rev_msg,(const char*) published->application_message);
     free(topic_name);
 }
 
@@ -186,13 +190,14 @@ int main(int argc, const char *argv[])
     const char* addr;
     const char* port;
     const char* topic;
-
     /* get address (argv[1] if present) */
     if (argc > 1) {
         addr = argv[1];
     } else {
         //addr = "218.89.239.8";
         addr = "127.0.0.1";
+        //addr = "192.168.31.246";
+        //addr = "192.168.31.185";
     }
 
     /* get port number (argv[2] if present) */
@@ -206,7 +211,8 @@ int main(int argc, const char *argv[])
     if (argc > 3) {
         topic = argv[3];
     } else {
-        topic = "devices/TC/measurement";
+        //topic = "devices/TC/measurement";
+        topic = "devices/measurement/register";
     }
 
     /* open the non-blocking TCP socket (connecting to the broker) */
@@ -220,7 +226,7 @@ int main(int argc, const char *argv[])
     /* setup a client */
     struct mqtt_client client;
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
-    uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
+    uint8_t recvbuf[2048]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
     mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
 
@@ -237,21 +243,41 @@ int main(int argc, const char *argv[])
         exit_example(EXIT_FAILURE, sockfd, NULL);
 
     }
-     /* publish the register */        
-    mqtt_publish(&client, topic, json1_1, strlen((const char *)json1_1) + 1, MQTT_PUBLISH_QOS_0);
-    printf("\033[1m\033[45;33m[3]终端发布消息:\033[0m\n\n");
-    usleep(2000000U);
-	printf("%s\n\n",json1_1);
+     /* publish the register */       
+    //while(fgetc(stdin) == '\n') {
+        mqtt_publish(&client, topic, json1_1, strlen((const char *)json1_1), MQTT_PUBLISH_QOS_0);   
+        printf("\033[1m\033[45;33m[3]终端发布消息:\033[0m\n\n");
+        usleep(2000000U);
+	    printf("%s\n\n",json1_1);
+    //}
+    //while(fgetc(stdin) != EOF); 
     cJSON_Delete(root);
     free(json1_1);
     //usleep(2000000U);
-
+    /*等待获取消息*/
+    //while(fgetc(stdin) != '\n') ;
 	/* subscribe */
+    usleep(2000000U);
     mqtt_subscribe(&client, topic, 0);
     //usleep(2000000U);
-    mqtt_publish(&client, topic, "1111111111111111111", 25, MQTT_PUBLISH_QOS_0);
-    usleep(8000000U);
-    mqtt_subscribe(&client, topic, 0);
+    //printf("\033[1m\033[45;33m[4]终端订阅消息:\033[0m\n\n");
+    /* start publishing the time */
+    printf("\033[1m\033[45;33m[4]监听订阅消息:\033[0m\n\n");
+
+    while(fgetc(stdin) != '\n') ;
+    /*判断返回数据*/
+    printf("%s\n", rev_msg);
+    if (strstr(rev_msg,"success!")!=0)
+        printf("\033[1m\033[45;33m验证成功success!\033[0m\n");
+    else
+        printf("\033[1m\033[45;33m验证失败failed!\033[0m\n");
+
+    /* block */
+    while(fgetc(stdin) != EOF);
+    //usleep(2000000U);
+    //mqtt_publish(&client, topic, "1111111111111111111", 25, MQTT_PUBLISH_QOS_0);
+    //usleep(8000000U);
+    //mqtt_subscribe(&client, topic, 0);
    	/* check for errors */
     if (client.error != MQTT_OK) {
         fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));

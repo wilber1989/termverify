@@ -49,6 +49,7 @@ int main(int argc, const char *argv[])
     if (argc > 1) {
         addr = argv[1];
     } else {
+        //addr = "192.168.31.185";
         addr = "127.0.0.1";
     }
 
@@ -63,7 +64,7 @@ int main(int argc, const char *argv[])
     if (argc > 3) {
         topic = argv[3];
     } else {
-        topic = "devices/TC/measurement";
+        topic = "devices/measurement/register";
     }
 
     /* open the non-blocking TCP socket (connecting to the broker) */
@@ -79,7 +80,7 @@ int main(int argc, const char *argv[])
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
     uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
-    mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
+    mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane1@mens.de", "jolie", 0, 400);
 
     /* check that we don't have any errors */
     if (client.error != MQTT_OK) {
@@ -244,7 +245,7 @@ int main(int argc, const char *argv[])
     }   
 
     /* subscribe */
-    mqtt_subscribe(&client, topic, 0);
+    //mqtt_subscribe(&client, topic, 0);
 
     /* start publishing the time */
     //printf("-------------------------------\n");
