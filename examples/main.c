@@ -158,6 +158,7 @@ int main(int argc, const char *argv[])
 	char *dpub_e = BN_bn2hex(dpub->e);
 	//printf("%s\n",dpub_n);
 	//printf("%s\n",dpub_e);
+    RSA_free(dpub);//删除公钥结构体
 
 	/*创建json并摘要*/
     cJSON *root;   
@@ -178,7 +179,8 @@ int main(int argc, const char *argv[])
 	unsigned char cipper[512]={0};
     size_t outl=512;
     outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest1,cipper,ppri, RSA_PKCS1_PADDING);
-	char shString[512*2+1];
+	RSA_free(ppri);//删除私钥结构体
+    char shString[512*2+1];
     for (unsigned int i = 0; i < outl; i++)
     sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
     //printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
@@ -230,7 +232,7 @@ int main(int argc, const char *argv[])
     struct mqtt_client client;
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
     uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
-    mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
+    mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback2);
     mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
 
     /* check that we don't have any errors */
@@ -291,19 +293,59 @@ int main(int argc, const char *argv[])
         exit_example(EXIT_FAILURE, sockfd, NULL);
 
     }
-    mqtt_subscribe(&client2, topic, 0);
+    //mqtt_subscribe(&client2, topic, 0);
     //usleep(2000000U);
     //printf("\033[1m\033[45;33m[4]终端订阅消息:\033[0m\n\n");
     /* start publishing the time */
     printf("\033[1m\033[45;33m[4]监听订阅消息:\033[0m\n\n");
-    //usleep(8000000U);
+    //usleep(5000000U);
     //printf("%s\n", rev_msg);
     while(fgetc(stdin) != EOF); 
     //while(fgetc(stdin) != '\n') ;
     /*判断返回数据*/
     //while(rev_msg==NULL);
-    
-    usleep(1000000U);
+
+    /*获取返回数据，验证hash，用平台公钥解密比对是否一致*/
+    //memset(rev_msg,0,512); 
+    //strcpy(rev_msg,"{\"flag\":\"register_res\",\"status\":\"success\",\"sign\":\"xxxx\"}");
+    cJSON *root_rev,*root_revsign;   
+    root_rev = cJSON_CreateObject();
+    root_revsign = cJSON_CreateObject();
+    root_rev = cJSON_Parse((const char *)rev_msg);
+    root_revsign = cJSON_GetObjectItem(root_rev,"sign");
+    char* sign_rev =cJSON_Print(root_revsign );
+    cJSON_DeleteItemFromObject(root_rev,"sign");
+    char* veri_rev = cJSON_Print(root_rev);
+    //printf("sign_rev:%s\n", sign_rev);
+    //printf("veri_rev:%s\n", veri_rev);
+    unsigned char digest_veri[SHA_DIGEST_LENGTH];
+    SHA_CTX ctx_veri;
+    SHA1_Init(&ctx_veri);
+    SHA1_Update(&ctx_veri, veri_rev, strlen(veri_rev));
+    SHA1_Final(digest_veri, &ctx_veri);
+    //printf("digest_veri:%s\n", digest_veri);
+
+    /*读取平台公钥*/
+    FILE *platpub_file;
+    RSA *platpub= RSA_new();
+    platpub_file = fopen("/home/zwl/桌面/terminal verification/examples/ppubkey.key", "r");
+    if (NULL == platpub_file)
+    {
+        printf("open file 'platpubkey.key' failed!\n");
+        return -1;
+    }
+    PEM_read_RSAPrivateKey(platpub_file,&platpub, NULL, NULL);
+    fclose(platpub_file);
+    platpub_file=NULL;
+
+    unsigned char newplain[512]={0};
+    size_t outl2=RSA_public_decrypt(strlen(sign_rev),(const unsigned char *)sign_rev, newplain, platpub, RSA_PKCS1_PADDING);
+    char newplain_String[512*2+1];
+    for (unsigned int i = 0; i < outl2; i++)
+    sprintf(&newplain_String[i*2], "%02x", (unsigned int)newplain[i]);
+    printf("newplain_String:%s\n", newplain_String);
+
+    usleep(2000000U);
     //printf("%s\n", rev_msg);
     if (strstr(rev_msg,"BIOS")!=0)
         printf("\033[1m\033[45;33m[5]设备验证成功success!\033[0m\n");
