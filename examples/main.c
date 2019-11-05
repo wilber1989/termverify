@@ -74,9 +74,12 @@ void exit_example(int status, int sockfd, pthread_t *client_daemon)
     exit(status);
 }
 
-
-
 void publish_callback(void** unused, struct mqtt_response_publish *published) 
+{
+  
+}
+
+void publish_callback2(void** unused, struct mqtt_response_publish *published) 
 {
     /* note that published->topic_name is NOT null-terminated (here we'll change it to a c-string) */
     char* topic_name = (char*) malloc(published->topic_name_size + 1);
@@ -217,16 +220,16 @@ int main(int argc, const char *argv[])
 
     /* open the non-blocking TCP socket (connecting to the broker) */
     int sockfd = open_nb_socket(addr, port);
-
     if (sockfd == -1) {
         perror("Failed to open socket: ");
         exit_example(EXIT_FAILURE, sockfd, NULL);
     }
+    fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
 
     /* setup a client */
     struct mqtt_client client;
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
-    uint8_t recvbuf[2048]; /* recvbuf should be large enough any whole mqtt message expected to be received */
+    uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
     mqtt_connect(&client, "publishing_client", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
 
@@ -256,22 +259,58 @@ int main(int argc, const char *argv[])
     //usleep(2000000U);
     /*等待获取消息*/
     //while(fgetc(stdin) != '\n') ;
-	/* subscribe */
-    usleep(2000000U);
-    mqtt_subscribe(&client, topic, 0);
+	    if (client.error != MQTT_OK) {
+        fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
+        exit_example(EXIT_FAILURE, sockfd, &client_daemon);
+        }   
+    /* exit */ 
+    //exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+    
+    /* 订阅通道 */
+    sockfd = open_nb_socket(addr, port);
+    if (sockfd == -1) {
+        perror("Failed to open socket: ");
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+    }
+    fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+
+    struct mqtt_client client2;
+    uint8_t sendbuf2[2048]; 
+    uint8_t recvbuf2[1024]; 
+    mqtt_init(&client2, sockfd, sendbuf2, sizeof(sendbuf2), recvbuf2, sizeof(recvbuf2), publish_callback2);
+    mqtt_connect(&client2, "subscribing_client", NULL, NULL, 0, NULL, NULL, 0, 400);
+
+    if (client2.error != MQTT_OK) {
+        fprintf(stderr, "error: %s\n", mqtt_error_str(client2.error));
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+    }
+
+    pthread_t client_daemon2;
+    if(pthread_create(&client_daemon2, NULL, client_refresher, &client2)) {
+        fprintf(stderr, "Failed to start client daemon.\n");
+        exit_example(EXIT_FAILURE, sockfd, NULL);
+
+    }
+    mqtt_subscribe(&client2, topic, 0);
     //usleep(2000000U);
     //printf("\033[1m\033[45;33m[4]终端订阅消息:\033[0m\n\n");
     /* start publishing the time */
     printf("\033[1m\033[45;33m[4]监听订阅消息:\033[0m\n\n");
-
-    while(fgetc(stdin) != '\n') ;
+    //usleep(8000000U);
+    //printf("%s\n", rev_msg);
+    while(fgetc(stdin) != EOF); 
+    //while(fgetc(stdin) != '\n') ;
     /*判断返回数据*/
-    printf("%s\n", rev_msg);
-    if (strstr(rev_msg,"success!")!=0)
-        printf("\033[1m\033[45;33m验证成功success!\033[0m\n");
-    else
-        printf("\033[1m\033[45;33m验证失败failed!\033[0m\n");
-
+    //while(rev_msg==NULL);
+    
+    usleep(1000000U);
+    //printf("%s\n", rev_msg);
+    if (strstr(rev_msg,"BIOS")!=0)
+        printf("\033[1m\033[45;33m[5]设备验证成功success!\033[0m\n");
+    else{
+        printf("\033[1m\033[45;33m[5]设备验证失败failed!\033[0m\n");
+        return 0;
+        }    
     /* block */
     while(fgetc(stdin) != EOF);
     //usleep(2000000U);
@@ -279,12 +318,7 @@ int main(int argc, const char *argv[])
     //usleep(8000000U);
     //mqtt_subscribe(&client, topic, 0);
    	/* check for errors */
-    if (client.error != MQTT_OK) {
-        fprintf(stderr, "error: %s\n", mqtt_error_str(client.error));
-        exit_example(EXIT_FAILURE, sockfd, &client_daemon);
-        }	
- 	/* exit */ 
-    exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+
     return 0;
 }
 
