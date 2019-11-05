@@ -185,6 +185,8 @@ int main(int argc, const char *argv[])
     sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
     //printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
 	cJSON_AddStringToObject(root,"sign",shString);
+    //printf("shString:%s\n",shString);
+    //printf("shString(length):%ld\n",strlen(shString));
 	char* json1_1 = cJSON_Print(root);
 	printf("\033[1m\033[45;33m[2] 产品私钥对设备ID及设备公钥签名sign:\033[0m\n\n");
 	usleep(2000000U);
@@ -316,7 +318,8 @@ int main(int argc, const char *argv[])
     char* sign_rev =cJSON_Print(root_revsign );
     cJSON_DeleteItemFromObject(root_rev,"sign");
     char* veri_rev = cJSON_Print(root_rev);
-    //printf("sign_rev:%s\n", sign_rev);
+    printf("sign_rev:%s\n", sign_rev);
+    printf("sign_rev(length):%ld\n", strlen(sign_rev)-2);
     //printf("veri_rev:%s\n", veri_rev);
     unsigned char digest_veri[SHA_DIGEST_LENGTH];
     SHA_CTX ctx_veri;
@@ -334,12 +337,13 @@ int main(int argc, const char *argv[])
         printf("open file 'platpubkey.key' failed!\n");
         return -1;
     }
-    PEM_read_RSAPrivateKey(platpub_file,&platpub, NULL, NULL);
+    PEM_read_RSAPublicKey(platpub_file,&platpub, NULL, NULL);
+    RSA_print_fp(stdout, platpub, 5);
     fclose(platpub_file);
     platpub_file=NULL;
-
+    const char * a ="62dd908de8044f9fed88ee700213f5229ae62b88856e3c27fbac4c4508bb53f0";
     unsigned char newplain[512]={0};
-    size_t outl2=RSA_public_decrypt(strlen(sign_rev),(const unsigned char *)sign_rev, newplain, platpub, RSA_PKCS1_PADDING);
+    size_t outl2 = RSA_public_decrypt(strlen(sign_rev)-2,(const unsigned char *)sign_rev, newplain, platpub, RSA_NO_PADDING);
     char newplain_String[512*2+1];
     for (unsigned int i = 0; i < outl2; i++)
     sprintf(&newplain_String[i*2], "%02x", (unsigned int)newplain[i]);
