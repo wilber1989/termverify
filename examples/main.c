@@ -5,6 +5,7 @@
 
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
+#include <openssl/ssl.h>
 #include <cjson/cJSON.h>
 #include <mqtt.h>
 #include "templates/posix_sockets.h"
@@ -35,7 +36,7 @@ int createkeyfile()
         printf("create file 'key' failed!\n");
         return 0;
     }
-    PEM_write_RSAPublicKey(pub_file, pub, NULL, NULL, 512, NULL, NULL);
+    PEM_write_RSAPublicKey(pub_file, pub);
   	PEM_write_RSAPrivateKey(pri_file, pri, NULL, NULL, 512, NULL, NULL);
     fclose(pub_file);
     fclose(pri_file);
@@ -186,7 +187,7 @@ int main(int argc, const char *argv[])
     SHA1_Init(&ctx1);
     //SHA1_Update(&ctx1, json1, strlen(json1));
     //SHA1_Final(digest1, &ctx1);
-	SHA1_Update(&ctx1,json1, strlen(json1));
+	SHA1_Update(&ctx1,"12345", strlen("12345"));
     SHA1_Final(digest1, &ctx1);
     for (unsigned int i = 0; i < SHA_DIGEST_LENGTH; i++)
     printf("\033[1m\033[45;33m%02x\033[0m",digest1[i]);
@@ -195,11 +196,13 @@ int main(int argc, const char *argv[])
 	/*加密设备ID及设备公钥n和e*/
 	unsigned char cipper[512]={0};
     size_t outl=512;
-    outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest1,cipper,ppri, RSA_PKCS1_PADDING);
-	RSA_free(ppri);//删除私钥结构体
+    unsigned int signlen;
+    //outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest1,cipper,ppri, RSA_PKCS1_PADDING);
+    RSA_sign(NID_sha1, (unsigned char *)digest1,SHA_DIGEST_LENGTH, cipper, (unsigned int *)&signlen,ppri);
+    RSA_free(ppri);//删除私钥结构体
 
     char shString[512*2+1];
-    for (unsigned int i = 0; i < outl; i++)
+    for (unsigned int i = 0; i < signlen; i++)
     sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
     //printf("\033[1m\033[45;33m%s\033[0m\n\n",shString);
 	cJSON_AddStringToObject(root,"sign",shString);

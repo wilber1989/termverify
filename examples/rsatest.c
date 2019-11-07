@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
+#include <openssl/ssl.h>
 
 /*********************************************
  * 函数功能：保存私钥到文件
