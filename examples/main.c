@@ -1,16 +1,16 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include<sys/time.h>
+
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
 #include <cjson/cJSON.h>
-
 #include <mqtt.h>
-#include <base64.h>
 #include "templates/posix_sockets.h"
 
 /*获取订阅消息变量*/
-char rev_msg[512];
+char rev_msg[512]={0};
 
 /*创建pem文件*/
 int createkeyfile()
@@ -168,18 +168,36 @@ int main(int argc, const char *argv[])
 	cJSON_AddStringToObject(root,"pub_e",dpub_e);
 	cJSON_AddStringToObject(root,"pub_n",dpub_n);
 	char* json1 = cJSON_Print(root);
+    /*去掉转换以后的\n\t*/
+    unsigned char i=0,j=0;
+    while(json1[i] != '\0')
+    {
+        if(json1[i] != '\n'&&json1[i] != '\t' )  //只有在不是空格的情况下目标才会移动赋值
+        {
+            json1[j++] = json1[i];
+        }
+        i++;  //源一直移动
+    }
+    json1[j] = '\0';
+    printf("%s\n",json1);
 
 	unsigned char digest1[SHA_DIGEST_LENGTH];
     SHA_CTX ctx1;
     SHA1_Init(&ctx1);
-    SHA1_Update(&ctx1, json1, strlen(json1));
+    //SHA1_Update(&ctx1, json1, strlen(json1));
+    //SHA1_Final(digest1, &ctx1);
+	SHA1_Update(&ctx1,json1, strlen(json1));
     SHA1_Final(digest1, &ctx1);
-	
+    for (unsigned int i = 0; i < SHA_DIGEST_LENGTH; i++)
+    printf("\033[1m\033[45;33m%02x\033[0m",digest1[i]);
+    printf("\033[1m\033[45;33m\n------------\n\033[0m");
+
 	/*加密设备ID及设备公钥n和e*/
 	unsigned char cipper[512]={0};
     size_t outl=512;
     outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest1,cipper,ppri, RSA_PKCS1_PADDING);
 	RSA_free(ppri);//删除私钥结构体
+
     char shString[512*2+1];
     for (unsigned int i = 0; i < outl; i++)
     sprintf(&shString[i*2], "%02x", (unsigned int)cipper[i]);
@@ -203,8 +221,8 @@ int main(int argc, const char *argv[])
     } else {
         //addr = "218.89.239.8";
         //addr = "127.0.0.1";
-        //addr = "192.168.31.246";
-        addr = "192.168.31.185";
+        addr = "192.168.31.246";
+        //addr = "192.168.31.185";
     }
 
     /* get port number (argv[2] if present) */
@@ -294,8 +312,26 @@ int main(int argc, const char *argv[])
 
     }
     printf("\033[1m\033[45;33m[4] 订阅消息并等待响应.....\033[0m\n\n");
-    usleep(2000000U);
     mqtt_subscribe(&client, topic, 0);
+     
+    /*判断执行时间，超时10秒未受到消息结束*/ 
+    float time_use=0;
+    struct timeval start;   
+    struct timeval end;
+    gettimeofday(&start,NULL);  
+    while(1)
+    {
+    if(rev_msg[0]!=0) break;//获得消息中断循环        
+    gettimeofday(&end,NULL);  
+    time_use=(end.tv_sec-start.tv_sec)*1000000+(end.tv_usec-start.tv_usec);//微秒         
+    if(time_use>=10000000)       
+        {           
+            printf("\033[1m\033[45;33m[5]等待超时......\033[0m\n\n");
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
+            return 0;        
+        }
+    }
     //usleep(2000000U);
     //printf("\033[1m\033[45;33m[4]终端订阅消息:\033[0m\n\n");  
     /* start publishing the time */
@@ -307,8 +343,6 @@ int main(int argc, const char *argv[])
     usleep(2000000U);
     //while(fgetc(stdin) != EOF); 
     //while(fgetc(stdin) != '\n') ;
-    /*判断返回数据*/
-    //while(rev_msg==NULL);
 
     /*获取返回数据，验证hash，用平台公钥解密比对是否一致*/
     //memset(rev_msg,0,512); 
@@ -343,7 +377,9 @@ int main(int argc, const char *argv[])
     else if(sign_rev[i]>='A'&&sign_rev[i]<='F')  
         sign_rev_int[i] = (unsigned int)(sign_rev[i]-'A'+10);
     else {
-        printf("received msg error!\n"); 
+        printf("received msg error!\n");
+        exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+        exit_example(EXIT_SUCCESS, sockfd, &client_daemon2); 
         return 0;
         }
     }
@@ -369,6 +405,8 @@ int main(int argc, const char *argv[])
     if (NULL == platpub_file)
     {
         printf("open file 'platpubkey.key' failed!\n");
+        exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+        exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
         return -1;
     }
     PEM_read_RSAPublicKey(platpub_file,&platpub, NULL, NULL);
@@ -396,12 +434,16 @@ int main(int argc, const char *argv[])
             else
             {
                 printf("\033[1m\033[45;33m[8]设备注册认证失败failed!\033[0m\n\n");
+                exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+                exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
                 return 0;
             } 
         }  
     else
         {
-            printf("\033[1m\033[45;33m[7]返回数据验签失败failed!\033[0m\n\n"); 
+            printf("\033[1m\033[45;33m[7]返回数据验签失败failed!\033[0m\n\n");
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon2); 
             return 0;
         }
   
@@ -414,6 +456,7 @@ int main(int argc, const char *argv[])
    	/* check for errors */
   /* exit */ 
     exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
+    exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
 
     return 0;
 }
