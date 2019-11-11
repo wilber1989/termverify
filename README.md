@@ -1,21 +1,10 @@
-<p align="right">
-    <a href="https://github.com/LiamBindle/MQTT-C/stargazers"><img src="https://img.shields.io/github/stars/LiamBindle/MQTT-C.svg?style=social&label=Star" style="margin-left:5em"></a>
-    <a href="https://github.com/LiamBindle/MQTT-C/network/members"><img src="https://img.shields.io/github/forks/LiamBindle/MQTT-C.svg?style=social&label=Fork"></a>
-</p>
-
 <p align="center">
-    <img width="70%" src="docs/mqtt-c-logo.png"><br>
-    <a href="https://liambindle.ca/MQTT-C"><img src="https://img.shields.io/badge/docs-passing-brightgreen.svg"></a>
-    <a href="https://github.com/LiamBindle/MQTT-C/issues"><img src="https://img.shields.io/badge/Maintained%3F-yes-green.svg"></a>
-    <a href="https://GitHub.com/LiamBindle/MQTT-C/issues/"><img src="https://img.shields.io/github/issues/LiamBindle/MQTT-C.svg"></a>
-    <a href="https://github.com/LiamBindle/MQTT-C/issues"><img src="https://img.shields.io/github/issues-closed/LiamBindle/MQTT-C.svg"></a>
-    <a href="https://github.com/LiamBindle/MQTT-C/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+ 终端远程验证方案
 </p>
-
-# 
-
-终端远程验证方案
 为对各类终端设备进行身份认证、远程度量、版本升级，确保终端可信接入，同时满足前期《远程验证细化方案》当中对于终端侧与服务侧交互内容的定义，本方案对接入安全管理平台的终端设备功能配置进行设计，从启动度量、身份认证过程阐述具体流程。
+
+![total](https://github.com/wilber1989/termverify/blob/master/examples/total.png)
+
 	（1）身份认证
 a、终端调用RSA函数生成设备公私钥对（dpubkey、dprikey），密钥对以只读方式储存在本地flash当中，并予以权限控制；
 b、使用由安全管理平台提供的产品私钥（pprikey）对设备ID及设备公钥e和n值进行签名，以json格式组织数据，如下：
@@ -32,6 +21,8 @@ mqtt_publish(&client, topic, json, strlen((const char *)json)+1, MQTT_PUBLISH_QO
 d、等待接受服务器端验证返回结果，订阅broker侧相同主题的保留消息（即最后一条发布消息），获取到后判断flag=register_res，利用安全管理平台公钥对数据进行验签，并判断返回json当中key=status的键值是否为success。
 订阅函数形式如下：
 mqtt_subscribe(&client, topic, MQTT_PUBLISH_QOS_1 | MQTT_PUBLISH_RETAIN);
+![total](https://github.com/wilber1989/termverify/blob/master/examples/register.png)
+
 （2）远程度量
 a、若验签及设备注册success，设备读取BIOS及OS镜像img文件，并求出SHA度量值，按顺序对镜像hash值进行PCR寄存器扩展储存；
 b、利用设备私钥（dprikey）对镜像文件PCR度量值进行签名，json组包格式如下所示：
@@ -57,6 +48,7 @@ payload = {
 "sign": "xxxxxxxxx" 
 }
 以上流程图示如下：
+![total](https://github.com/wilber1989/termverify/blob/master/examples/measurement.png)
 
 c、将主题为“devices/TC/measurement”、flag为measure的数据的json数据发送至broker服务器，等待安全管理平台进行度量验证。
 d、订阅相同主题消息，等待并获取到后判断flag=measure_res，利用安全管理平台公钥对数据进行验签，并判断返回json当中key=status的键值是否为success。
