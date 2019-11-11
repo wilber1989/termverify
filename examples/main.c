@@ -91,7 +91,7 @@ void publish_callback2(void** unused, struct mqtt_response_publish *published)
     //printf("Listening for messages.\n");
     //printf("-------------------------------\n");
     //usleep(2000000U);
-    //printf("\033[1m\033[45;32m主题('%s')最新消息:\n %s\033[0m\n", topic_name, (const char*) published->application_message);
+    printf("\033[1m\033[45;32m主题('%s')最新消息:\n %s\033[0m\n", topic_name, (const char*) published->application_message);
     strcpy(rev_msg,(const char*) published->application_message);
     free(topic_name);
 }
@@ -105,6 +105,228 @@ void* client_refresher(void* client)
     }
     return NULL;
 }
+
+int measurement(const char* addr, const char* port, const char* topic)
+{
+   
+
+    FILE *fp1,*fp2;
+    char buff_img1[1024];
+    char buff_img2[1024];
+    if(fgetc(stdin) == '\n') {
+        /* INPUT bios_image*/
+        fp1=fopen("/home/zwl/桌面/bios.img","rb");
+        if(fp1==NULL)
+        {
+            printf("Can't open file\n");
+            return 0;
+        }
+        fread(buff_img1,1,1024,fp1);
+        fclose(fp1);
+        fp1=NULL;
+        printf("\033[1m\033[45;33m[1] 读取bios镜像文件：\033[0m\n\n/home/zwl/桌面/bios.img\n\n");
+        usleep(2000000U);
+        /* SHA bios_image*/
+        unsigned char dig_img1[SHA_DIGEST_LENGTH];
+        SHA_CTX ctx_img1;
+        SHA1_Init(&ctx_img1);
+        SHA1_Update(&ctx_img1, buff_img1, strlen(buff_img1));
+        SHA1_Final(dig_img1, &ctx_img1);
+        char digHex_img1[SHA_DIGEST_LENGTH*2+1];
+        for (int i = 0; i < SHA_DIGEST_LENGTH; i++)
+        sprintf(&digHex_img1[i*2], "%02x", (unsigned int)dig_img1[i]);
+        printf("\033[1m\033[45;33m[2] 计算bios镜像度量SHA值：\033[0m\n\n%s\n\n",digHex_img1);
+        usleep(2000000U);
+        /* INPUT os_image*/
+        fp2=fopen("/home/zwl/桌面/os.img","rb");
+        if(fp2==NULL)
+        {
+            printf("Can't open file\n");
+            return 0;
+        }
+        fread(buff_img2,1,1024,fp2);
+        fclose(fp2);
+        fp2=NULL;
+        printf("\033[1m\033[45;33m[3] 读取os镜像文件：\033[0m\n\n/home/zwl/桌面/os.img\n\n");
+        usleep(2000000U);
+        /* SHA os_image*/
+        unsigned char dig_img2[SHA_DIGEST_LENGTH];
+        SHA_CTX ctx_img2;
+        SHA1_Init(&ctx_img2);
+        SHA1_Update(&ctx_img2, buff_img2, strlen(buff_img2));
+        SHA1_Final(dig_img2, &ctx_img2);
+        char digHex_img2[SHA_DIGEST_LENGTH*2+1];
+        for (int i = 0; i < SHA_DIGEST_LENGTH; i++)
+        sprintf(&digHex_img2[i*2], "%02x", (unsigned int)dig_img2[i]);
+        printf("\033[1m\033[45;33m[4] 计算os镜像度量SHA值：\033[0m\n\n%s\n\n",digHex_img2);
+        usleep(2000000U);
+        /* SHA digest*/
+        unsigned char dig_comb[SHA_DIGEST_LENGTH];
+        unsigned char tmp_comb[SHA_DIGEST_LENGTH*2];
+        strcat((char *)tmp_comb,(char *)dig_img1);
+        strcat((char *)tmp_comb,(char *)dig_img2);
+
+        SHA_CTX ctx_comb;
+        SHA1_Init(&ctx_comb);
+        SHA1_Update(&ctx_comb, tmp_comb, sizeof(tmp_comb));
+        SHA1_Final(dig_comb, &ctx_comb);
+        char digHex_comb[SHA_DIGEST_LENGTH*2+1];
+        for (int i = 0; i < SHA_DIGEST_LENGTH; i++)
+        sprintf(&digHex_comb[i*2], "%02x", (unsigned int)dig_comb[i]);
+        printf("\033[1m\033[45;33m[5] 计算bios及os镜像有序度量SHA值：\033[0m\n\n%s\n\n",digHex_comb);
+        usleep(2000000U);
+
+        /*create publish json data*/
+        cJSON *root,*ml,*pcrs,*file1,*file2;   
+        root=cJSON_CreateObject();     
+ //       cJSON_AddItemToObject(root, "name", cJSON_CreateString("Jack (\"Bee\") Nimble"));   
+        cJSON_AddStringToObject(root,"flag","measure");
+        cJSON_AddStringToObject(root,"deviceid","chislab1"); 
+        cJSON_AddItemToObject(root, "ML", ml=cJSON_CreateObject());  
+ //       cJSON_AddStringToObject(fmt,"type",     "rect");   
+        cJSON_AddNumberToObject(ml,"length",2);
+        cJSON_AddItemToObject(root, "1", file1=cJSON_CreateObject()); 
+        cJSON_AddItemToObject(root, "2", file2=cJSON_CreateObject());
+
+        cJSON_AddStringToObject(file1,"name","BIOS");
+        cJSON_AddStringToObject(file1,"sha1",digHex_img1);
+        cJSON_AddNumberToObject(file1,"PCR",1);
+
+        cJSON_AddStringToObject(file2,"name","OS");
+        cJSON_AddStringToObject(file2,"sha1",digHex_img2);
+        cJSON_AddNumberToObject(file2,"PCR", 1);
+
+        cJSON_AddItemToObject(root, "PCRs", pcrs=cJSON_CreateObject());
+        cJSON_AddStringToObject(pcrs,"1",digHex_comb);
+        char* out1=cJSON_Print(root);
+
+        /*去掉转换以后的\n\t*/
+        unsigned int a=0,b=0;
+        for (a= 0; out1[a] != '\0'; a++)
+
+        {
+            if(out1[a] != '\n' && out1[a] != '\t')
+            out1[b++] = out1[a];
+        }
+        out1[b] = '\0';
+        //printf("%s\n",out1);
+
+        unsigned char dig_json[SHA_DIGEST_LENGTH];
+        SHA_CTX ctx_json;
+        SHA1_Init(&ctx_json);
+        SHA1_Update(&ctx_json, out1, strlen(out1));
+        SHA1_Final(dig_json, &ctx_json);
+
+        /*读取设备私钥*/
+        FILE *dpri_file;
+        RSA *dpri= RSA_new();
+        dpri_file = fopen("/home/zwl/桌面/terminal verification/examples/dprikey.key", "r");
+        if (NULL == dpri_file)
+        {
+            printf("open file 'dprikey.key' failed!\n");
+            return -1;
+        }
+        PEM_read_RSAPrivateKey(dpri_file,&dpri, NULL, NULL);
+        fclose(dpri_file);
+        dpri_file=NULL;
+
+
+        /*加密度量json摘要*/
+        unsigned char dig_encrypt[512]={0};
+        unsigned int encryptlen;
+        RSA_sign(NID_sha1, (unsigned char *)dig_json,SHA_DIGEST_LENGTH, dig_encrypt, (unsigned int *)&encryptlen,dpri);
+        RSA_free(dpri);//删除私钥结构体
+
+        char digHex_encrypt[512*2+1];
+        for (unsigned int i = 0; i < encryptlen; i++)
+        sprintf(&digHex_encrypt[i*2], "%02x", (unsigned int)dig_encrypt[i]);
+
+        cJSON_AddStringToObject(root,"sign",digHex_encrypt); 
+
+        char* meas_out = cJSON_Print(root);
+        //printf("%s\n",meas_out); 
+
+        printf("\033[1m\033[45;33m[8] 设备发布度量消息:\n\n\033[0m%s\n\n",meas_out);
+
+
+        /* open the non-blocking TCP socket (connecting to the broker) */
+        int sockfd = open_nb_socket(addr, port);
+
+         if (sockfd == -1) {
+             perror("Failed to open socket: ");
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+         }
+
+        /* setup a client */
+        struct mqtt_client client3;
+        uint8_t sendbuf3[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
+        uint8_t recvbuf3[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
+        mqtt_init(&client3, sockfd, sendbuf3, sizeof(sendbuf3), recvbuf3, sizeof(recvbuf3), publish_callback);
+        mqtt_connect(&client3, "measure_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
+
+        /* check that we don't have any errors */
+        if (client3.error != MQTT_OK) {
+            fprintf(stderr, "error: %s\n", mqtt_error_str(client3.error));
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+        }
+
+        /* start a thread to refresh the client (handle egress and ingree client traffic) */
+        pthread_t client_daemon3;
+        if(pthread_create(&client_daemon3, NULL, client_refresher, &client3)) {
+            fprintf(stderr, "Failed to start client daemon.\n");
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+
+         }
+
+        /* publish the time */        
+        mqtt_publish(&client3, topic, meas_out, strlen((const char *)meas_out), MQTT_PUBLISH_QOS_0);        
+        cJSON_Delete(root);
+        free(meas_out);
+        /* check for errors */
+        if (client3.error != MQTT_OK) {
+            fprintf(stderr, "error: %s\n", mqtt_error_str(client3.error));
+            exit_example(EXIT_FAILURE, sockfd, &client_daemon3);
+        }
+        usleep(2000000U);
+
+        /* setup a client */
+        struct mqtt_client client4;
+        uint8_t sendbuf4[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
+        uint8_t recvbuf4[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
+        mqtt_init(&client4, sockfd, sendbuf4, sizeof(sendbuf4), recvbuf4, sizeof(recvbuf4), publish_callback2);
+        mqtt_connect(&client4, "measure_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
+
+        /* check that we don't have any errors */
+        if (client4.error != MQTT_OK) {
+            fprintf(stderr, "error: %s\n", mqtt_error_str(client4.error));
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+        }
+
+        /* start a thread to refresh the client (handle egress and ingree client traffic) */
+        pthread_t client_daemon4;
+        if(pthread_create(&client_daemon4, NULL, client_refresher, &client4)) {
+            fprintf(stderr, "Failed to start client daemon.\n");
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+
+         }
+
+        mqtt_subscribe(&client4, "devices/measurement/measure/res", 0);
+  
+        /* check for errors */
+        if (client4.error != MQTT_OK) {
+            fprintf(stderr, "error: %s\n", mqtt_error_str(client4.error));
+            exit_example(EXIT_FAILURE, sockfd, &client_daemon4);
+        }
+    } 
+    return 0;
+}
+
+
+
+
+
+
+
 int main(int argc, const char *argv[]) 
 {
     printf("----------------------------------------\n");
@@ -182,21 +404,19 @@ int main(int argc, const char *argv[])
     json1[j] = '\0';
     //printf("%s\n",json1);
 
-	unsigned char digest1[SHA_DIGEST_LENGTH];
-    SHA_CTX ctx1;
-    SHA1_Init(&ctx1);
-    SHA1_Update(&ctx1, json1, strlen(json1));
-    SHA1_Final(digest1, &ctx1);
+	unsigned char digest_send1[SHA_DIGEST_LENGTH];
+    SHA_CTX ctx_send1;
+    SHA1_Init(&ctx_send1);
+    SHA1_Update(&ctx_send1, json1, strlen(json1));
+    SHA1_Final(digest_send1, &ctx_send1);
     //for (unsigned int i = 0; i < SHA_DIGEST_LENGTH; i++)
     //printf("\033[1m\033[45;33m%02x\033[0m",digest1[i]);
     //printf("\033[1m\033[45;33m\n------------\n\033[0m");
 
 	/*加密设备ID及设备公钥n和e*/
 	unsigned char cipper[512]={0};
-    size_t outl=512;
     unsigned int signlen;
-    //outl=RSA_private_encrypt(SHA_DIGEST_LENGTH,(const unsigned char*)digest1,cipper,ppri, RSA_PKCS1_PADDING);
-    RSA_sign(NID_sha1, (unsigned char *)digest1,SHA_DIGEST_LENGTH, cipper, (unsigned int *)&signlen,ppri);
+    RSA_sign(NID_sha1, (unsigned char *)digest_send1,SHA_DIGEST_LENGTH, cipper, (unsigned int *)&signlen,ppri);
     RSA_free(ppri);//删除私钥结构体
 
     char shString[512*2+1];
@@ -210,7 +430,7 @@ int main(int argc, const char *argv[])
 	printf("\033[1m\033[45;33m[2] 产品私钥对设备ID及设备公钥签名sign:\033[0m\n\n");
 	usleep(2000000U);
 	printf("%s\n\n",shString);
-	usleep(2000000U);
+	usleep(2000000U); 
 
 	/*建立socket并发布*/
     const char* addr;
@@ -240,7 +460,7 @@ int main(int argc, const char *argv[])
         //topic = "devices/TC/measurement";
         topic = "devices/measurement/register";
     }
-
+    
     /* open the non-blocking TCP socket (connecting to the broker) */
     int sockfd = open_nb_socket(addr, port);
     if (sockfd == -1) {
@@ -272,7 +492,7 @@ int main(int argc, const char *argv[])
      /* publish the register */       
     //while(fgetc(stdin) == '\n') {
         mqtt_publish(&client, topic, json1_1, strlen((const char *)json1_1), MQTT_PUBLISH_QOS_0);   
-        printf("\033[1m\033[45;33m[3] 终端发布消息:\033[0m\n\n");
+        printf("\033[1m\033[45;33m[3] 终端发布认证消息:\033[0m\n\n");
         usleep(2000000U);
 	    printf("%s\n\n",json1_1);
     //}
@@ -464,7 +684,11 @@ int main(int argc, const char *argv[])
             exit_example(EXIT_SUCCESS, sockfd, &client_daemon2); 
             return 0;
         }
-  
+
+    /*设备度量流程*/
+    measurement(addr, port, "devices/measurement/measure");  
+
+    /*设备度量反馈*/    
     /* block */
     while(fgetc(stdin) != EOF);
     /* exit */ 

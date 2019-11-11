@@ -1,0 +1,43 @@
+# 这个 viminfo 文件是由 Vim 8.0 所产生。
+# 如果想要自行修改请特别小心！
+
+# Viminfo version
+|1,4
+
+# 文件被写的时候 ‘encoding’ 的值
+*encoding=utf-8
+
+
+# hlsearch on (H) or off (h):
+~h
+# 命令行 历史记录 (从新到旧)：
+:q!
+|2,0,1573443674,,"q!"
+
+# 查找字符串 历史记录 (从新到旧)：
+
+# 表达式 历史记录 (从新到旧)：
+
+# 输入行 历史记录 (从新到旧)：
+
+# Debug Line 历史记录 (从新到旧)：
+
+# 寄存器:
+
+# 文件标记:
+'0  1  0  ~/桌面/terminal verification/git
+|4,48,1,0,1573443674,"~/桌面/terminal verification/git"
+'1  1  0  ~/桌面/terminal verification/git
+|4,49,1,0,1573443309,"~/桌面/terminal verification/git"
+
+# 跳转列表 (从新到旧):
+-'  1  0  ~/桌面/terminal verification/git
+|4,39,1,0,1573443674,"~/桌面/terminal verification/git"
+-'  1  0  ~/桌面/terminal verification/git
+|4,39,1,0,1573443309,"~/桌面/terminal verification/git"
+
+# 文件内的标记历史记录 (从新到旧):
+
+> ~/桌面/terminal verification/git
+	*	1573443667	0
+	"	1	0
