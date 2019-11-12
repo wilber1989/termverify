@@ -13,7 +13,7 @@
 /*获取订阅消息变量*/
 char rev_msg[512]={0};
 
-/*创建pem文件*/
+/*创建pem key文件*/
 int createkeyfile()
 {
     RSA *rsa= RSA_new();
@@ -91,7 +91,7 @@ void publish_callback2(void** unused, struct mqtt_response_publish *published)
     //printf("Listening for messages.\n");
     //printf("-------------------------------\n");
     //usleep(2000000U);
-    printf("\033[1m\033[45;32m主题('%s')最新消息:\n %s\033[0m\n", topic_name, (const char*) published->application_message);
+    //printf("\033[1m\033[45;32m主题('%s')最新消息:\n %s\033[0m\n", topic_name, (const char*) published->application_message);
     strcpy(rev_msg,(const char*) published->application_message);
     free(topic_name);
 }
@@ -108,14 +108,18 @@ void* client_refresher(void* client)
 
 int measurement(const char* addr, const char* port, const char* topic)
 {
-   
+    usleep(2000000U);
+    printf("\033[1m\033[45;33m-------------------------------------------\033[0m\n\n");
+    printf("               \033[1m\033[45;33m设备度量流程\033[0m              \n\n");
+    printf("\033[1m\033[45;33m-------------------------------------------\033[0m\n\n");
+    usleep(2000000U);
 
     FILE *fp1,*fp2;
     char buff_img1[1024];
     char buff_img2[1024];
-    if(fgetc(stdin) == '\n') {
+    
         /* INPUT bios_image*/
-        fp1=fopen("/home/zwl/桌面/bios.img","rb");
+        fp1=fopen("/home/zwl/桌面/terminal verification/examples/bios.img","rb");
         if(fp1==NULL)
         {
             printf("Can't open file\n");
@@ -124,7 +128,7 @@ int measurement(const char* addr, const char* port, const char* topic)
         fread(buff_img1,1,1024,fp1);
         fclose(fp1);
         fp1=NULL;
-        printf("\033[1m\033[45;33m[1] 读取bios镜像文件：\033[0m\n\n/home/zwl/桌面/bios.img\n\n");
+        printf("\033[1m\033[45;33m[1] 读取bios镜像文件 from：\033[0m\n\n/terminal verification/examples/bios.img\n\n");
         usleep(2000000U);
         /* SHA bios_image*/
         unsigned char dig_img1[SHA_DIGEST_LENGTH];
@@ -147,7 +151,7 @@ int measurement(const char* addr, const char* port, const char* topic)
         fread(buff_img2,1,1024,fp2);
         fclose(fp2);
         fp2=NULL;
-        printf("\033[1m\033[45;33m[3] 读取os镜像文件：\033[0m\n\n/home/zwl/桌面/os.img\n\n");
+        printf("\033[1m\033[45;33m[3] 读取os镜像文件 from：\033[0m\n\n/terminal verification/examples/os.img\n\n");
         usleep(2000000U);
         /* SHA os_image*/
         unsigned char dig_img2[SHA_DIGEST_LENGTH];
@@ -165,10 +169,16 @@ int measurement(const char* addr, const char* port, const char* topic)
         unsigned char tmp_comb[SHA_DIGEST_LENGTH*2];
         strcat((char *)tmp_comb,(char *)dig_img1);
         strcat((char *)tmp_comb,(char *)dig_img2);
+        //strcat((char *)tmp_comb,(char *)"12345678912345678912");
+        //strcat((char *)tmp_comb,(char *)"12345678912345678912");
+        //printf("%s\n",tmp_comb);
+        char tmpHex_comb[SHA_DIGEST_LENGTH*4];
+        for (int i = 0; i < SHA_DIGEST_LENGTH*2; i++)
+        sprintf(&tmpHex_comb[i*2], "%02x", (unsigned int)tmp_comb[i]);
 
         SHA_CTX ctx_comb;
         SHA1_Init(&ctx_comb);
-        SHA1_Update(&ctx_comb, tmp_comb, sizeof(tmp_comb));
+        SHA1_Update(&ctx_comb, tmpHex_comb, SHA_DIGEST_LENGTH*4);//对拼接的16进制摘要进行SHA
         SHA1_Final(dig_comb, &ctx_comb);
         char digHex_comb[SHA_DIGEST_LENGTH*2+1];
         for (int i = 0; i < SHA_DIGEST_LENGTH; i++)
@@ -185,8 +195,8 @@ int measurement(const char* addr, const char* port, const char* topic)
         cJSON_AddItemToObject(root, "ML", ml=cJSON_CreateObject());  
  //       cJSON_AddStringToObject(fmt,"type",     "rect");   
         cJSON_AddNumberToObject(ml,"length",2);
-        cJSON_AddItemToObject(root, "1", file1=cJSON_CreateObject()); 
-        cJSON_AddItemToObject(root, "2", file2=cJSON_CreateObject());
+        cJSON_AddItemToObject(ml, "1", file1=cJSON_CreateObject()); 
+        cJSON_AddItemToObject(ml, "2", file2=cJSON_CreateObject());
 
         cJSON_AddStringToObject(file1,"name","BIOS");
         cJSON_AddStringToObject(file1,"sha1",digHex_img1);
@@ -246,7 +256,7 @@ int measurement(const char* addr, const char* port, const char* topic)
         char* meas_out = cJSON_Print(root);
         //printf("%s\n",meas_out); 
 
-        printf("\033[1m\033[45;33m[8] 设备发布度量消息:\n\n\033[0m%s\n\n",meas_out);
+        printf("\033[1m\033[45;33m[6] 设备发布度量消息:\033[0m\n\n%s\n\n",meas_out);
 
 
         /* open the non-blocking TCP socket (connecting to the broker) */
@@ -256,8 +266,9 @@ int measurement(const char* addr, const char* port, const char* topic)
              perror("Failed to open socket: ");
             exit_example(EXIT_FAILURE, sockfd, NULL);
          }
-
-        /* setup a client */
+         fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+        
+        /* 度量发布客户端 */
         struct mqtt_client client3;
         uint8_t sendbuf3[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
         uint8_t recvbuf3[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
@@ -278,7 +289,7 @@ int measurement(const char* addr, const char* port, const char* topic)
 
          }
 
-        /* publish the time */        
+        /* publish */        
         mqtt_publish(&client3, topic, meas_out, strlen((const char *)meas_out), MQTT_PUBLISH_QOS_0);        
         cJSON_Delete(root);
         free(meas_out);
@@ -289,12 +300,20 @@ int measurement(const char* addr, const char* port, const char* topic)
         }
         usleep(2000000U);
 
-        /* setup a client */
+        sockfd = open_nb_socket(addr, port);
+
+        if (sockfd == -1) {
+             perror("Failed to open socket: ");
+            exit_example(EXIT_FAILURE, sockfd, NULL);
+        }
+        fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL) | O_NONBLOCK);
+        
+         /* 度量订阅客户端 */
         struct mqtt_client client4;
         uint8_t sendbuf4[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
         uint8_t recvbuf4[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
         mqtt_init(&client4, sockfd, sendbuf4, sizeof(sendbuf4), recvbuf4, sizeof(recvbuf4), publish_callback2);
-        mqtt_connect(&client4, "measure_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
+        mqtt_connect(&client4, "measure_res_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
 
         /* check that we don't have any errors */
         if (client4.error != MQTT_OK) {
@@ -309,7 +328,9 @@ int measurement(const char* addr, const char* port, const char* topic)
             exit_example(EXIT_FAILURE, sockfd, NULL);
 
          }
-
+        
+        rev_msg[0]=0;//清空标志位，这里很重要
+        printf("\033[1m\033[45;33m[7] 订阅消息并等待响应.....\033[0m\n\n");
         mqtt_subscribe(&client4, "devices/measurement/measure/res", 0);
   
         /* check for errors */
@@ -317,7 +338,143 @@ int measurement(const char* addr, const char* port, const char* topic)
             fprintf(stderr, "error: %s\n", mqtt_error_str(client4.error));
             exit_example(EXIT_FAILURE, sockfd, &client_daemon4);
         }
-    } 
+
+        /*判断执行时间，超时10秒未受到消息结束*/ 
+        float time_use=0;
+        struct timeval start;   
+        struct timeval end;
+        gettimeofday(&start,NULL);  
+        while(1)
+        {
+        if(rev_msg[0]!=0) break;//获得消息中断循环        
+        gettimeofday(&end,NULL);  
+        time_use=(end.tv_sec-start.tv_sec)*1000000+(end.tv_usec-start.tv_usec);//微秒         
+        if(time_use>=10000000)       
+            {           
+                printf("\033[1m\033[45;33m[8] 等待超时......\033[0m\n\n");
+                exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+                return 0;        
+            }
+        }
+
+        printf("\033[1m\033[45;33m[8] 服务器返回消息:\033[0m\n\n");
+        usleep(2000000U);
+        printf("rev_msg:");
+        for (unsigned int i = 0; i < strlen(rev_msg)-4; i++)
+        printf("%c", rev_msg[i]);
+        printf("\n\n");
+        usleep(2000000U);
+        printf("\033[1m\033[45;33m[9]返回数据校验.....\033[0m\n\n");
+        usleep(2000000U);
+
+        /*获取返回数据，验证hash，用平台公钥解密比对是否一致*/
+        cJSON *root_rev,*root_revsign; 
+        root_rev = cJSON_CreateObject();
+        root_revsign = cJSON_CreateObject();
+        root_rev = cJSON_Parse((const char *)rev_msg);
+        root_revsign = cJSON_GetObjectItem(root_rev,"sign");
+        char sign_rev[257];
+        strcpy(sign_rev,root_revsign->valuestring);
+        cJSON_DeleteItemFromObject(root_rev,"sign");  
+        char* veri_rev = cJSON_Print(root_rev);
+
+        /*去掉转换以后的\n\t*/
+        unsigned int p=0,q=0;
+        while(veri_rev[p] != '\0')
+        {
+            if(veri_rev[p] != '\n'&&veri_rev[p] != '\t'&&veri_rev[p] != ' ')  
+                veri_rev[q++] = veri_rev[p];
+            p++;  
+        }
+        veri_rev[q] = '\0';
+        //printf("sign_rev:%s\n", sign_rev);  
+        //printf("sign_rev(length):%ld\n", strlen(sign_rev));
+        //printf("veri_rev:%s\n", veri_rev);
+
+        /*将签名的16进制字符串转化为普通字符串*/
+        unsigned int sign_rev_int[256];
+        unsigned char sign_rev_char[128];
+        for (unsigned int i = 0; sign_rev[i]!='\0'; i++)
+        {
+        if(sign_rev[i]>='0'&&sign_rev[i]<='9')  
+            sign_rev_int[i] = (unsigned int)(sign_rev[i]-'0');
+        else if(sign_rev[i]>='a'&&sign_rev[i]<='f')  
+            sign_rev_int[i] = (unsigned int)(sign_rev[i]-'a'+10);
+        else if(sign_rev[i]>='A'&&sign_rev[i]<='F')  
+            sign_rev_int[i] = (unsigned int)(sign_rev[i]-'A'+10);
+        else {
+            printf("received msg error!\n");
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+            return 0;
+            }
+        }
+
+        for (unsigned int i = 0; i < 128; i++)
+            sign_rev_char[i]=(unsigned char)(sign_rev_int[2*i]*16 + sign_rev_int[2*i+1]);   
+
+        unsigned char digest_veri[SHA_DIGEST_LENGTH];
+        SHA_CTX ctx_veri;
+        SHA1_Init(&ctx_veri);
+        SHA1_Update(&ctx_veri, veri_rev, strlen(veri_rev));
+        SHA1_Final(digest_veri, &ctx_veri);
+        printf("返回数据摘要：");
+        for(unsigned int i =0;i<SHA_DIGEST_LENGTH;i++) 
+        printf("%02x",digest_veri[i]);
+        printf("\n\n");
+        usleep(2000000U);
+
+        /*读取平台公钥*/
+        FILE *platpub_file;
+        RSA *platpub= RSA_new();
+        platpub_file = fopen("/home/zwl/桌面/terminal verification/examples/smp_public_key.pem", "r");
+        if (NULL == platpub_file)
+        {
+            printf("open file 'platpubkey.key' failed!\n");
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+            return -1;
+        }
+        PEM_read_RSA_PUBKEY(platpub_file,&platpub, NULL, NULL);//读取pem文件数据转化为公钥
+        //RSA_print_fp(stdout, platpub, 5);
+        fclose(platpub_file);
+        platpub_file=NULL;
+
+        int ret = RSA_verify(NID_sha1, (unsigned char *)digest_veri, SHA_DIGEST_LENGTH, (const unsigned char *)sign_rev_char, sizeof(sign_rev_char), platpub);
+        printf("使用平台公钥验签RSA_verify ret=%d\n\n",ret);
+        RSA_free(platpub);
+        usleep(2000000U);
+        if(ret==1)
+            {
+                printf("\033[1m\033[45;33m[10]返回数据验签成功 Verify_Success!\033[0m\n\n");
+                usleep(2000000U);
+                if (strstr(rev_msg,"trust")!=0)
+                    printf("\033[1m\033[45;33m[11]设备可信度量验证通过 Measure_Success!\033[0m\n\n");   
+                else if(strstr(rev_msg,"danger")!=0)
+                {
+                    printf("\033[1m\033[45;33m[11]设备可信度量验证不通过 Measure_Failed!\033[0m\n\n");
+                    exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+                    return 0;
+                }
+                 else if(strstr(rev_msg,"verify_fail")!=0)
+                {
+                    printf("\033[1m\033[45;33m[11]服务器端验签不通过 Server_Verify_Failed!\033[0m\n\n");
+                    exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+                    return 0;
+                }
+                else 
+                {
+                    printf("\033[1m\033[45;33m[11]度量状态无法识别 MeasureState_Unidentified!\033[0m\n\n");
+                    exit_example(EXIT_SUCCESS, sockfd, &client_daemon3);
+                    return 0;
+                }
+
+            }  
+        else
+            {
+                printf("\033[1m\033[45;33m[10]返回数据验签失败 Verify_Failed!\033[0m\n\n");
+                exit_example(EXIT_SUCCESS, sockfd, &client_daemon3); 
+                return 0;
+            } 
+    
     return 0;
 }
 
@@ -337,10 +494,14 @@ int main(int argc, const char *argv[])
     printf("\033[1m\033[45;33mPress CTRL+D to exit.\033[0m\n");
 	printf("----------------------------------------\n");
     
-    
 	if(fgetc(stdin) == '\n') 
 	{
-		printf("\033[1m\033[45;33m[1] 创建设备密钥对,展示设备公钥:\033[0m\n\n");
+        printf("\033[1m\033[45;33m-------------------------------------------\033[0m\n\n");
+        printf("               \033[1m\033[45;33m设备认证流程\033[0m              \n\n");
+        printf("\033[1m\033[45;33m-------------------------------------------\033[0m\n\n");
+        usleep(2000000U);
+		
+        printf("\033[1m\033[45;33m[1] 创建设备密钥对,展示设备公钥:\033[0m\n\n");
 		usleep(2000000U);
 		//createkeyfile();
 		getdpubkey();
@@ -474,7 +635,7 @@ int main(int argc, const char *argv[])
     uint8_t sendbuf[2048]; /* sendbuf should be large enough to hold multiple whole mqtt messages */
     uint8_t recvbuf[1024]; /* recvbuf should be large enough any whole mqtt message expected to be received */
     mqtt_init(&client, sockfd, sendbuf, sizeof(sendbuf), recvbuf, sizeof(recvbuf), publish_callback);
-    mqtt_connect(&client, "terminal_device_publish", NULL, NULL, 0, "jane@mens.de", "jolie", 0, 400);
+    mqtt_connect(&client, "register_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
 
     /* check that we don't have any errors */
     if (client.error != MQTT_OK) {
@@ -519,7 +680,7 @@ int main(int argc, const char *argv[])
     uint8_t sendbuf2[2048]; 
     uint8_t recvbuf2[1024]; 
     mqtt_init(&client2, sockfd, sendbuf2, sizeof(sendbuf2), recvbuf2, sizeof(recvbuf2), publish_callback2);
-    mqtt_connect(&client2, "terminal_device_subscribe", NULL, NULL, 0, NULL, NULL, 0, 400);
+    mqtt_connect(&client2, "register_res_devices", NULL, NULL, 0, NULL, NULL, 0, 400);
 
     if (client2.error != MQTT_OK) {
         fprintf(stderr, "error: %s\n", mqtt_error_str(client2.error));
@@ -550,7 +711,6 @@ int main(int argc, const char *argv[])
         {           
             printf("\033[1m\033[45;33m[5] 等待超时......\033[0m\n\n");
             exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-            exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
             return 0;        
         }
     }
@@ -615,7 +775,6 @@ int main(int argc, const char *argv[])
     else {
         printf("received msg error!\n");
         exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-        exit_example(EXIT_SUCCESS, sockfd, &client_daemon2); 
         return 0;
         }
     }
@@ -643,7 +802,6 @@ int main(int argc, const char *argv[])
     {
         printf("open file 'platpubkey.key' failed!\n");
         exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-        exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
         return -1;
     }
     //PEM_read_RSAPublicKey(platpub_file,&platpub, NULL, NULL);
@@ -665,23 +823,21 @@ int main(int argc, const char *argv[])
     //printf("rev_decrypt_String:%s\n", rev_decrypt_String);
     if(ret==1)
         {
-            printf("\033[1m\033[45;33m[7]返回数据验签成功success!\033[0m\n\n");
+            printf("\033[1m\033[45;33m[7]返回数据验签成功 Verify_Success!\033[0m\n\n");
             usleep(2000000U);
             if (strstr(rev_msg,"success")!=0)
-                printf("\033[1m\033[45;33m[8]设备注册认证成功success!\033[0m\n\n");   
+                printf("\033[1m\033[45;33m[8]设备注册认证成功 Regist_Success!\033[0m\n\n");   
             else
             {
-                printf("\033[1m\033[45;33m[8]设备注册认证失败failed!\033[0m\n\n");
+                printf("\033[1m\033[45;33m[8]设备注册认证失败 Regist_failed!\033[0m\n\n");
                 exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-                exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
                 return 0;
             } 
         }  
     else
         {
-            printf("\033[1m\033[45;33m[7]返回数据验签失败failed!\033[0m\n\n");
-            exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-            exit_example(EXIT_SUCCESS, sockfd, &client_daemon2); 
+            printf("\033[1m\033[45;33m[7]返回数据验签失败 Verify_Failed!\033[0m\n\n");
+            exit_example(EXIT_SUCCESS, sockfd, &client_daemon); 
             return 0;
         }
 
@@ -690,11 +846,9 @@ int main(int argc, const char *argv[])
 
     /*设备度量反馈*/    
     /* block */
-    while(fgetc(stdin) != EOF);
+    //while(fgetc(stdin) != EOF);
     /* exit */ 
     exit_example(EXIT_SUCCESS, sockfd, &client_daemon);
-    exit_example(EXIT_SUCCESS, sockfd, &client_daemon2);
-
     return 0;
 }
 
